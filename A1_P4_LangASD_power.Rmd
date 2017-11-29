@@ -1,0 +1,217 @@
+---
+title: "Assignment 1 - Language Development in ASD - part 4"
+author: "Riccardo Fusaroli"
+date: "August 10, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Welcome to the fourth exciting part of the Language Development in ASD exercise
+
+In this exercise we will assess how many participants we would need to adequately replicate our findings (ensuring our sample size is adequate, our alpha at 0.05 and our beta at 0.8).
+
+### Exercise 1
+
+How much power does your study have (if your model estimates are quite right)?
+- [GitHub]Load your dataset, fit your favorite model, assess power for your main effects and interactions of interest.
+- Report the power analysis and comment on what you can (or cannot) use its estimates for.
+```{r}
+#setwd
+setwd("C:/Users/Samsung/Desktop/expmeth/Assignment-4")
+
+#libraries
+library(ggplot2)
+library(MASS)
+library(dplyr)
+library(lme4)
+library(MuMIn)
+library(lmerTest)
+library(gstat)
+library(stringr)
+library(plyr)
+library(caret)
+library(modelr)
+library(ModelMetrics)
+library(Metrics)
+library(tidyverse)
+library(simr)
+library(pacman)
+
+#Round to four digits
+options(digits = 4)
+
+#load dataset
+traind <- read.csv("cleandata.csv")
+testd <- read.csv("testdata.csv")
+testd <- subset(testd, select = -c(X)) #dataset without x
+traind<- subset(traind, select= -c(X))
+
+#Change Subject ID's to not overlap
+testd$SUBJ = testd$SUBJ+61
+
+#merge datasets
+data = rbind(traind, testd)
+
+#factors
+data$SUBJ=as.factor(data$SUBJ)
+data$Diagnosis=as.factor(data$Diagnosis)
+
+#Recreate favourite model
+m <- lmer(CHI_MLU~VISIT+Diagnosis+types_CHI+verbalIQ+tokens_CHI+(1+VISIT|SUBJ), data = data) 
+
+#fit the model
+summary(m) #output
+r.squaredGLMM(m) #r2m=0.7375
+
+#Test power with current beta values for each variable
+powerVISIT = powerSim(m, fixed("VISIT"), nsim=100)
+powerDiagnosis = powerSim(m, fixed("DiagnosisTD"), nsim=100)
+powertypes_CHI = powerSim(m, fixed("types_CHI"), nsim=100)
+powerverbalIQ = powerSim(m, fixed("verbalIQ"), nsim=100)
+powertokens_CHI = powerSim(m, fixed("tokens_CHI"), nsim=100)
+
+powerVISIT #98%, effect size 0.080, alpha=0.05, nrow=387
+powerDiagnosis #0%, effect size 0.080,  alpha=0.05, nrow=387
+powertypes_CHI #100%, effect size 0.0070, alpha=0.05, nrow=387
+powerverbalIQ #93%, effect size 0.023, alpha=0.05, nrow=387
+powertokens_CHI #19%, effect size 0.00022,  alpha=0.05, nrow=387
+
+#how to report it? what can i use it for?
+
+```
+
+
+### Exercise 2
+
+How would you perform a more conservative power analysis?
+- Identify and justify a minimum effect size for each of your relevant effects
+- [GitHub] take the model from exercise 1 and replace the effects with the minimum effect size that you'd accept.
+- [GitHub] assess the power curve by Child.ID, identifying an ideal number of participants to estimate each effect
+- OPTIONAL if your power estimates do not reach an acceptable threshold simulate additional participants and repeat the previous analysis
+- Report the power analysis and comment on what you can (or cannot) use its estimates for.
+
+```{r}
+# Change to lowest relevant effect sizes.. (don't know how to choose now, leave effect sizes approx. as they are)
+model<-m
+fixef(model)
+fixef(model)["VISIT"] <- 0.05
+fixef(model)["DiagnosisTD"] <- 0.07
+fixef(model)["types_CHI"] <- 0.006
+fixef(model)["verbalIQ"] <- 0.02
+fixef(model)["tokens_CHI"] <- 0.0002
+
+
+#Calculate the power depending on number of participants
+powerCurveVISIT = powerCurve(model, fixed("VISIT"), along="SUBJ", nsim=50)
+powerCurveDiagnosis = powerCurve(model, fixed("DiagnosisTTD"), along="SUBJ", nsim=50)
+powerCurvetypes_CHI = powerCurve(model, fixed("types_CHI"), along="SUBJ", nsim=50)
+powerCurveverbalIQ = powerCurve(model, fixed("verbalIQ"), along="SUBJ", nsim=50)
+powerCurvetokens_CHI = powerCurve(model, fixed("tokens_CHI"), along="SUBJ", nsim=50)
+
+
+#And Plot it
+plot(powerCurveVISIT) #close to 60
+plot(powerCurveDiagnosis)#it's gonna be zero 
+plot(powerCurvetypes_CHI) #15
+plot(powerCurveverbalIQ) #40+, 65 for sure
+plot(powerCurvetokens_CHI) #way more than 60
+
+
+### Riccardo's clumsy function to simulate new participants
+### TO DO points are only notes for myself, so not part of the assignment
+
+createNewData <- function (participants,visits,model){
+  # participants is the number of subjects
+  # visits is the number of visits
+  # TO DO: LOOP THROUGH ALL FE ROWS AND AUTOMATICALLY EXTRACT NAMES OF FIXED EFFECTS AND ESTIMATES
+  fe <- fixef(model)
+  Intercept <- fe[1] #intercept
+  bVisit <- fe[2] #visit
+  bDiagnosis <- fe[3] #diagnosis
+  bVisitDiagnosis <- fe[4] #visit diagnosis interaction
+  # TO DO: INTEGRATE STANDARD ERROR?
+  
+  # TO DO: LOOP THROUGH ALL VC COMPONENTS AND AUTOMATICALLY EXTRACT NAMES OF EFFECTS AND ESTIMATES
+  vc<-VarCorr(model) # variance component
+  sigmaSubject <- as.numeric(attr(vc[[1]],"stddev")[1]) # random intercept by subject
+  sigmaVisit <- as.numeric(attr(vc[[1]],"stddev")[2]) # random slope of visit over subject
+  sigmaResiduals <- as.numeric(attr(vc,"sc"))
+  sigmaCorrelation <- as.numeric(attr(vc[[1]],"correlation")[2])
+  
+  # Create an empty dataframe
+  d=expand.grid(VISIT=1:visits,SUBJ=1:participants)
+  # Randomly sample from a binomial (to generate the diagnosis)
+  condition <- sample(rep(0:1, participants/2))
+  d$Diagnosis<-condition[d$SUBJ]
+  d$Diagnosis[is.na(d$Diagnosis)]<-1
+  
+  ## Define variance covariance matrices:
+  Sigma.u<-matrix(c(sigmaSubject^2,
+                    sigmaCorrelation*sigmaSubject*sigmaVisit,
+                    sigmaCorrelation*sigmaSubject*sigmaVisit,
+                    sigmaVisit^2),nrow=2)
+  
+  ## generate new fake participants (column1=RandomIntercept, column2=RandomSlope)
+  u<-mvrnorm(n=participants,
+             mu=c(0,0),Sigma=cov(ranef(model)$SUBJ))
+  
+  ## now generate fake data:
+  ### the outcome is extracted from a gaussian with
+  ### the solution to the model's equation as mean and
+  ### the residual standard deviation as standard deviation 
+  d$CHI_MLU <- rnorm(participants*visits,
+                     (Intercept+u[,1]) +
+                     (bVisit+u[,2])*d$VISIT + 
+                     bDiagnosis*d$Diagnosis ,sigmaResiduals)  
+  
+  return(d)
+}
+
+
+```
+
+
+### Exercise 3
+
+Assume you have only the resources to collect 30 kids (15 with ASD and 15 TDs). Identify the power for each relevant effect and discuss whether it's worth to run the study and why.
+
+```{r}
+#Simulate dataset
+d_sim = createNewData(500, 6, m)
+d_sim$SUBJ=as.factor(d_sim$SUBJ)
+
+#Train model on simulated data
+Model_Sim = lmer(CHI_MLU ~ VISIT*Diagnosis + (1+VISIT|SUBJ), d_sim)
+summary(Model_Sim)
+
+
+#Run a basic model to find smallest interesting effect for the model on the simulated data
+Model_0 = lmer(CHI_MLU ~ VISIT*Diagnosis + (1+VISIT|SUBJ), data)
+summary(Model_0)
+fixef(Model_0)
+
+
+#Define smallest interesting effect size
+fixef(Model_Sim)["VISIT"] <- 0.1
+fixef(Model_Sim)["Diagnosis"] <- -0.2
+fixef(Model_Sim)["VISIT:Diagnosis"] <- 0.2
+
+
+#Calculate power for different amounts of participants
+powerCurveVISITsim = powerCurve(Model_Sim, fixed("VISIT"), along="SUBJ", nsim=50)
+powerCurveDiagnosissim = powerCurve(Model_Sim, fixed("Diagnosis"), along="SUBJ", nsim=50)
+powerCurveinteractsim = powerCurve(Model_Sim, fixed("VISIT:Diagnosis"), along="SUBJ", nsim=50)
+
+plot(powerCurveVISITsim)
+plot(powerCurveDiagnosissim)
+plot(powerCurveinteractsim)
+```
+
+
+
+
+
+

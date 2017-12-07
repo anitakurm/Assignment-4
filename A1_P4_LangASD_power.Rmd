@@ -97,11 +97,11 @@ How would you perform a more conservative power analysis?
 # Change to lowest relevant effect sizes.. (don't know how to choose now, leave effect sizes approx. as they are)
 model<-m
 fixef(model)
-fixef(model)["VISIT"] <- 0.05
-fixef(model)["DiagnosisTD"] <- 0.07
-fixef(model)["types_CHI"] <- 0.006
-fixef(model)["verbalIQ"] <- 0.02
-fixef(model)["tokens_CHI"] <- 0.0002
+fixef(model)["VISIT"] <- 0.04
+fixef(model)["DiagnosisTD"] <- 0.04
+fixef(model)["types_CHI"] <- 0.003
+fixef(model)["verbalIQ"] <- 0.01
+fixef(model)["tokens_CHI"] <- 0.0001
 
 
 #Calculate the power depending on number of participants
@@ -170,15 +170,6 @@ createNewData <- function (participants,visits,model){
   return(d)
 }
 
-
-```
-
-
-### Exercise 3
-
-Assume you have only the resources to collect 30 kids (15 with ASD and 15 TDs). Identify the power for each relevant effect and discuss whether it's worth to run the study and why.
-
-```{r}
 #Simulate dataset
 d_sim = createNewData(500, 6, m)
 d_sim$SUBJ=as.factor(d_sim$SUBJ)
@@ -208,6 +199,17 @@ powerCurveinteractsim = powerCurve(Model_Sim, fixed("VISIT:Diagnosis"), along="S
 plot(powerCurveVISITsim)
 plot(powerCurveDiagnosissim)
 plot(powerCurveinteractsim)
+
+
+```
+
+
+### Exercise 3
+
+Assume you have only the resources to collect 30 kids (15 with ASD and 15 TDs). Identify the power for each relevant effect and discuss whether it's worth to run the study and why.
+
+```{r}
+#look at the plots from the previous exercise
 ```
 
 
